@@ -9,7 +9,7 @@ from collections import namedtuple, deque
 from typing import List
 import settings as s
 import events as e
-from .callbacks import state_to_features
+#from .callbacks import state_to_features
 
 # If GPU is used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -87,7 +87,42 @@ def setup_training(self):
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
     self.replay_buffer = ReplayBuffer(REPLAY_BUFFER_SIZE)
     self.optimizer = optim.Adam(q_network.parameters(), lr=LEARNING_RATE)
+def state_to_features(game_state: dict) -> np.array:
+    """
+    Convert the game state to the input of your model.
 
+    :param game_state: A dictionary describing the current game board.
+    :return: np.array
+    """
+    if game_state is None:
+        return None
+
+    player_position = game_state["self"][3]  # Player's position as (x, y)
+    board = game_state["field"]  # The game board
+    max_x, max_y = board.shape[0], board.shape[1]
+
+    # Initialize the state representation as a 3x3 grid centered around the player
+    state_representation = np.zeros((3, 3))
+
+    for i in range(-1, 2):
+        for j in range(-1, 2):
+            x, y = player_position[0] + i, player_position[1] + j
+
+            # Check if the coordinates are within the bounds of the game board
+            if 0 <= x < max_x and 0 <= y < max_y:
+                cell_content = board[x, y]
+
+                if cell_content == 1:  # Wall
+                    state_representation[i + 1, j + 1] = -1
+                elif cell_content == 2:  # Crate
+                    state_representation[i + 1, j + 1] = 0.5
+                elif cell_content == 3:  # Coin
+                    state_representation[i + 1, j + 1] = 1
+
+            else:
+                state_representation[i + 1, j + 1] = -1
+
+    return state_representation.flatten()
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -155,10 +190,10 @@ def reward_from_events(self, events: List[str]) -> int:
         e.KILLED_OPPONENT: 5,
         e.KILLED_OPPONENT: 5,
         e.INVALID_ACTION: -2,
-        e.MOVED_LEFT: 1,
-        e.MOVED_RIGHT: 1,
-        e.MOVED_UP: 1,
-        e.MOVED_DOWN: 1,
+        e.MOVED_LEFT: 10,
+        e.MOVED_RIGHT: 10,
+        e.MOVED_UP: 10,
+        e.MOVED_DOWN: 10,
         PLACEHOLDER_EVENT: -0.1  # The custom event is bad
     }
     reward_sum = 0
